@@ -56,7 +56,7 @@ func loadIgnore(root string) *ignoreList {
 				il.deny = append(il.deny, strings.TrimRight(line, "/"))
 			}
 		}
-		f.Close()
+		_ = f.Close()
 	}
 	return il
 }

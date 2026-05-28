@@ -65,15 +65,12 @@ func Open(root string, kinds map[string]bool) (*Index, error) {
 	if idx, ok := loadCache(abs, fp); ok {
 		return idx, nil
 	}
-	idx, err := build(abs, files)
-	if err != nil {
-		return nil, err
-	}
+	idx := build(abs, files)
 	_ = saveCache(abs, fp, idx)
 	return idx, nil
 }
 
-func build(abs string, files []fileInfo) (*Index, error) {
+func build(abs string, files []fileInfo) *Index {
 	idx := &Index{Root: abs, emb: NewHashEmbedder(embedDim)}
 	for _, f := range files {
 		data, err := os.ReadFile(filepath.Join(abs, f.rel))
@@ -83,7 +80,7 @@ func build(abs string, files []fileInfo) (*Index, error) {
 		idx.Chunks = append(idx.Chunks, chunkFile(f.rel, data)...)
 	}
 	idx.finalize()
-	return idx, nil
+	return idx
 }
 
 // finalize builds the retrievers from the chunk list.
@@ -110,7 +107,7 @@ func (i *Index) Search(query string, topK int) []Result {
 		topK = 10
 	}
 	qTokens := Tokenize(query)
-	lexRanking := topDocs(i.bm25.Score(qTokens), poolSize)
+	lexRanking := topDocs(i.bm25.Score(qTokens))
 
 	qVec := i.emb.Embed(qTokens)
 	semScores := map[int]float64{}
@@ -119,7 +116,7 @@ func (i *Index) Search(query string, topK int) []Result {
 			semScores[d] = s
 		}
 	}
-	semRanking := topDocs(semScores, poolSize)
+	semRanking := topDocs(semScores)
 
 	return i.collect(fuse(lexRanking, semRanking), topK, -1)
 }
@@ -153,7 +150,7 @@ func (i *Index) FindRelated(file string, line, topK int) ([]Result, error) {
 			lexScores[d] = s
 		}
 	}
-	ranking := fuse(topDocs(semScores, poolSize), topDocs(lexScores, poolSize))
+	ranking := fuse(topDocs(semScores), topDocs(lexScores))
 	return i.collect(ranking, topK, src), nil
 }
 
@@ -280,7 +277,7 @@ func fingerprint(files []fileInfo, kinds map[string]bool) string {
 	sort.Strings(ks)
 	h.Write([]byte(strings.Join(ks, ",") + "\n"))
 	for _, f := range files {
-		fmt.Fprintf(h, "%s:%d:%d\n", f.rel, f.mtime, f.size)
+		_, _ = fmt.Fprintf(h, "%s:%d:%d\n", f.rel, f.mtime, f.size)
 	}
 	return hex.EncodeToString(h.Sum(nil))
 }
@@ -290,7 +287,7 @@ func loadCache(abs, fp string) (*Index, bool) {
 	if err != nil {
 		return nil, false
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	var cd cacheData
 	if err := gob.NewDecoder(f).Decode(&cd); err != nil {
 		return nil, false
@@ -315,10 +312,12 @@ func saveCache(abs, fp string, idx *Index) error {
 	}
 	cd := cacheData{Root: abs, Fingerprint: fp, Chunks: idx.Chunks, Vecs: idx.vecs}
 	if err := gob.NewEncoder(f).Encode(&cd); err != nil {
-		f.Close()
-		os.Remove(tmp)
+		_ = f.Close()
+		_ = os.Remove(tmp)
 		return err
 	}
-	f.Close()
+	if err := f.Close(); err != nil {
+		return err
+	}
 	return os.Rename(tmp, cachePath(abs))
 }

@@ -33,8 +33,8 @@ type scored struct {
 	score float64
 }
 
-// topDocs sorts a doc->score map descending and returns up to limit doc ids.
-func topDocs(scores map[int]float64, limit int) []int {
+// topDocs sorts a doc->score map descending and returns up to poolSize doc ids.
+func topDocs(scores map[int]float64) []int {
 	s := make([]scored, 0, len(scores))
 	for d, v := range scores {
 		s = append(s, scored{doc: d, score: v})
@@ -45,8 +45,8 @@ func topDocs(scores map[int]float64, limit int) []int {
 		}
 		return s[i].doc < s[j].doc
 	})
-	if limit > 0 && len(s) > limit {
-		s = s[:limit]
+	if len(s) > poolSize {
+		s = s[:poolSize]
 	}
 	out := make([]int, len(s))
 	for i, x := range s {
