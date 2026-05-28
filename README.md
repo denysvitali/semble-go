@@ -74,4 +74,9 @@ Wire it into an agent with `semble init`:
   model. Lexical (BM25) recall matches upstream intent; true distilled semantic
   recall awaits a Model2Vec backend behind the `Embedder` interface.
 - Local repositories only (no remote git-URL cloning yet).
+
+## License
+
+MIT — see [LICENSE](LICENSE). This is an independent Go port inspired by
+[MinishLab/semble](https://github.com/MinishLab/semble) (MIT, © 2026 Thomas van Dongen).
 ```
