@@ -7,7 +7,6 @@ import (
 
 	"github.com/denysvitali/semble-go/index"
 	"github.com/denysvitali/semble-go/mcpserver"
-	"github.com/denysvitali/semble-go/model2vec"
 
 	"github.com/mark3labs/mcp-go/server"
 	"github.com/spf13/cobra"
@@ -32,14 +31,16 @@ returning only the most relevant snippets instead of whole files.`,
 }
 
 func openIndex(path string, kinds map[string]bool) (*index.Index, error) {
-	if flagModel != "" {
-		m, err := model2vec.Load(flagModel)
-		if err != nil {
-			return nil, fmt.Errorf("load model %q: %w", flagModel, err)
-		}
-		return index.OpenWith(path, kinds, m)
+	return mcpserver.OpenIndex(path, kinds, flagModel)
+}
+
+// argOr returns args[i] when present, otherwise def. Used to make the optional
+// trailing [path] argument default to the current directory.
+func argOr(args []string, i int, def string) string {
+	if i < len(args) {
+		return args[i]
 	}
-	return index.Open(path, kinds)
+	return def
 }
 
 var searchCmd = &cobra.Command{
@@ -47,11 +48,7 @@ var searchCmd = &cobra.Command{
 	Short: "Search a repository for relevant code chunks",
 	Args:  cobra.RangeArgs(1, 2),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		path := "."
-		if len(args) == 2 {
-			path = args[1]
-		}
-		idx, err := openIndex(path, index.KindsFromContent(flagContent))
+		idx, err := openIndex(argOr(args, 1, "."), index.KindsFromContent(flagContent))
 		if err != nil {
 			return err
 		}
@@ -69,11 +66,7 @@ var findRelatedCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("invalid line number %q: %w", args[1], err)
 		}
-		path := "."
-		if len(args) == 3 {
-			path = args[2]
-		}
-		idx, err := openIndex(path, index.AllKinds)
+		idx, err := openIndex(argOr(args, 2, "."), index.AllKinds)
 		if err != nil {
 			return err
 		}
@@ -91,11 +84,7 @@ var savingsCmd = &cobra.Command{
 	Short: "Estimate token savings vs reading the whole corpus",
 	Args:  cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		path := "."
-		if len(args) == 1 {
-			path = args[0]
-		}
-		idx, err := openIndex(path, index.KindsFromContent(flagContent))
+		idx, err := openIndex(argOr(args, 0, "."), index.KindsFromContent(flagContent))
 		if err != nil {
 			return err
 		}

@@ -38,22 +38,13 @@ func (s *Server) register() {
 		mcp.WithString("query", mcp.Required(),
 			mcp.Description("Natural-language or code query (e.g. 'where are http requests retried')"),
 		),
-		mcp.WithString("repo",
-			mcp.Description("Local path or git URL of the repository to search (default: current directory). Remote URLs are shallow-cloned and cached."),
-			mcp.DefaultString("."),
-		),
-		mcp.WithNumber("top_k",
-			mcp.Description("Maximum number of chunks to return (default: 10)"),
-			mcp.DefaultNumber(10),
-		),
+		repoOption(),
+		topKOption(),
 		mcp.WithString("content",
 			mcp.Description("Which files to index: code (default), docs, config, or all"),
 			mcp.DefaultString("code"),
 		),
-		mcp.WithString("model",
-			mcp.Description("Path to a local Model2Vec model directory (uses default hash embedder if empty)"),
-			mcp.DefaultString(""),
-		),
+		modelOption(),
 	), s.handleSearch)
 
 	s.srv.AddTool(mcp.NewTool("find_related",
@@ -66,19 +57,33 @@ func (s *Server) register() {
 		mcp.WithNumber("line", mcp.Required(),
 			mcp.Description("1-based line number within the file"),
 		),
-		mcp.WithString("repo",
-			mcp.Description("Local path or git URL of the repository (default: current directory)"),
-			mcp.DefaultString("."),
-		),
-		mcp.WithNumber("top_k",
-			mcp.Description("Maximum number of chunks to return (default: 10)"),
-			mcp.DefaultNumber(10),
-		),
-		mcp.WithString("model",
-			mcp.Description("Path to a local Model2Vec model directory (uses default hash embedder if empty)"),
-			mcp.DefaultString(""),
-		),
+		repoOption(),
+		topKOption(),
+		modelOption(),
 	), s.handleFindRelated)
+}
+
+// repoOption, topKOption and modelOption define the tool parameters shared by
+// every tool, keeping their descriptions and defaults in one place.
+func repoOption() mcp.ToolOption {
+	return mcp.WithString("repo",
+		mcp.Description("Local path or git URL of the repository to search (default: current directory). Remote URLs are shallow-cloned and cached."),
+		mcp.DefaultString("."),
+	)
+}
+
+func topKOption() mcp.ToolOption {
+	return mcp.WithNumber("top_k",
+		mcp.Description("Maximum number of chunks to return (default: 10)"),
+		mcp.DefaultNumber(10),
+	)
+}
+
+func modelOption() mcp.ToolOption {
+	return mcp.WithString("model",
+		mcp.Description("Path to a local Model2Vec model directory (uses default hash embedder if empty)"),
+		mcp.DefaultString(""),
+	)
 }
 
 func (s *Server) handleSearch(_ context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -92,7 +97,7 @@ func (s *Server) handleSearch(_ context.Context, req mcp.CallToolRequest) (*mcp.
 	content := argStr(args, "content", "code")
 	model := argStr(args, "model", "")
 
-	idx, err := openIndex(repo, index.KindsFromContent(content), model)
+	idx, err := OpenIndex(repo, index.KindsFromContent(content), model)
 	if err != nil {
 		return mcp.NewToolResultError(fmt.Sprintf("failed to index %q: %v", repo, err)), nil
 	}
@@ -111,7 +116,7 @@ func (s *Server) handleFindRelated(_ context.Context, req mcp.CallToolRequest) (
 	topK := argInt(args, "top_k", 10)
 	model := argStr(args, "model", "")
 
-	idx, err := openIndex(repo, index.AllKinds, model)
+	idx, err := OpenIndex(repo, index.AllKinds, model)
 	if err != nil {
 		return mcp.NewToolResultError(fmt.Sprintf("failed to index %q: %v", repo, err)), nil
 	}
@@ -122,7 +127,10 @@ func (s *Server) handleFindRelated(_ context.Context, req mcp.CallToolRequest) (
 	return mcp.NewToolResultText(index.FormatResults(results)), nil
 }
 
-func openIndex(repo string, kinds map[string]bool, modelPath string) (*index.Index, error) {
+// OpenIndex opens repo with the Model2Vec model at modelPath, falling back to
+// the default hash embedder when modelPath is empty. It is the shared entry
+// point used by both the CLI and the MCP server.
+func OpenIndex(repo string, kinds map[string]bool, modelPath string) (*index.Index, error) {
 	if modelPath != "" {
 		m, err := model2vec.Load(modelPath)
 		if err != nil {
@@ -133,14 +141,14 @@ func openIndex(repo string, kinds map[string]bool, modelPath string) (*index.Ind
 	return index.Open(repo, kinds)
 }
 
-func argStr(args map[string]interface{}, key, def string) string {
+func argStr(args map[string]any, key, def string) string {
 	if v, ok := args[key].(string); ok && v != "" {
 		return v
 	}
 	return def
 }
 
-func argInt(args map[string]interface{}, key string, def int) int {
+func argInt(args map[string]any, key string, def int) int {
 	if v, ok := args[key].(float64); ok {
 		return int(v)
 	}

@@ -19,12 +19,7 @@ func fuse(rankings ...[]int) []scored {
 	for doc, s := range agg {
 		out = append(out, scored{doc: doc, score: s})
 	}
-	sort.Slice(out, func(i, j int) bool {
-		if out[i].score != out[j].score {
-			return out[i].score > out[j].score
-		}
-		return out[i].doc < out[j].doc
-	})
+	sortScored(out)
 	return out
 }
 
@@ -33,18 +28,24 @@ type scored struct {
 	score float64
 }
 
-// topDocs sorts a doc->score map descending and returns up to poolSize doc ids.
-func topDocs(scores map[int]float64) []int {
-	s := make([]scored, 0, len(scores))
-	for d, v := range scores {
-		s = append(s, scored{doc: d, score: v})
-	}
+// sortScored orders chunks by score descending, breaking ties by ascending
+// doc id so rankings are deterministic.
+func sortScored(s []scored) {
 	sort.Slice(s, func(i, j int) bool {
 		if s[i].score != s[j].score {
 			return s[i].score > s[j].score
 		}
 		return s[i].doc < s[j].doc
 	})
+}
+
+// topDocs sorts a doc->score map descending and returns up to poolSize doc ids.
+func topDocs(scores map[int]float64) []int {
+	s := make([]scored, 0, len(scores))
+	for d, v := range scores {
+		s = append(s, scored{doc: d, score: v})
+	}
+	sortScored(s)
 	if len(s) > poolSize {
 		s = s[:poolSize]
 	}

@@ -2,6 +2,7 @@ package index
 
 import (
 	"bufio"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -62,13 +63,22 @@ func loadIgnore(root string) *ignoreList {
 }
 
 func (il *ignoreList) ignored(rel string) bool {
+	if il.allowed(rel) {
+		return false
+	}
 	base := filepath.Base(rel)
-	for _, p := range il.allow {
+	for _, p := range il.deny {
 		if matchPattern(p, rel, base) {
-			return false
+			return true
 		}
 	}
-	for _, p := range il.deny {
+	return false
+}
+
+// allowed reports whether rel matches a "!" force-include rule.
+func (il *ignoreList) allowed(rel string) bool {
+	base := filepath.Base(rel)
+	for _, p := range il.allow {
 		if matchPattern(p, rel, base) {
 			return true
 		}
@@ -96,7 +106,7 @@ func matchPattern(pat, rel, base string) bool {
 // .sembleignore "!" rules are always considered.
 func walk(root string, kinds map[string]bool, il *ignoreList) ([]fileInfo, error) {
 	var files []fileInfo
-	err := filepath.Walk(root, func(path string, fi os.FileInfo, err error) error {
+	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return nil
 		}
@@ -104,8 +114,8 @@ func walk(root string, kinds map[string]bool, il *ignoreList) ([]fileInfo, error
 		if rerr != nil || rel == "." {
 			return nil
 		}
-		if fi.IsDir() {
-			if alwaysSkip[fi.Name()] || il.ignored(rel) {
+		if d.IsDir() {
+			if alwaysSkip[d.Name()] || il.ignored(rel) {
 				return filepath.SkipDir
 			}
 			return nil
@@ -113,14 +123,11 @@ func walk(root string, kinds map[string]bool, il *ignoreList) ([]fileInfo, error
 		if il.ignored(rel) {
 			return nil
 		}
-		forced := false
-		for _, p := range il.allow {
-			if matchPattern(p, rel, filepath.Base(rel)) {
-				forced = true
-				break
-			}
+		if !il.allowed(rel) && !indexable(rel, kinds) {
+			return nil
 		}
-		if !forced && !indexable(rel, kinds) {
+		fi, ierr := d.Info()
+		if ierr != nil {
 			return nil
 		}
 		files = append(files, fileInfo{rel: rel, mtime: fi.ModTime().Unix(), size: fi.Size()})
