@@ -7,6 +7,7 @@ import (
 
 	"github.com/denysvitali/semble-go/index"
 	"github.com/denysvitali/semble-go/mcpserver"
+	"github.com/denysvitali/semble-go/model2vec"
 
 	"github.com/mark3labs/mcp-go/server"
 	"github.com/spf13/cobra"
@@ -18,6 +19,7 @@ var (
 	flagTopK    int
 	flagContent string
 	flagAgent   string
+	flagModel   string
 )
 
 var rootCmd = &cobra.Command{
@@ -29,6 +31,17 @@ returning only the most relevant snippets instead of whole files.`,
 	SilenceUsage: true,
 }
 
+func openIndex(path string, kinds map[string]bool) (*index.Index, error) {
+	if flagModel != "" {
+		m, err := model2vec.Load(flagModel)
+		if err != nil {
+			return nil, fmt.Errorf("load model %q: %w", flagModel, err)
+		}
+		return index.OpenWith(path, kinds, m)
+	}
+	return index.Open(path, kinds)
+}
+
 var searchCmd = &cobra.Command{
 	Use:   "search <query> [path]",
 	Short: "Search a repository for relevant code chunks",
@@ -38,7 +51,7 @@ var searchCmd = &cobra.Command{
 		if len(args) == 2 {
 			path = args[1]
 		}
-		idx, err := index.Open(path, index.KindsFromContent(flagContent))
+		idx, err := openIndex(path, index.KindsFromContent(flagContent))
 		if err != nil {
 			return err
 		}
@@ -60,7 +73,7 @@ var findRelatedCmd = &cobra.Command{
 		if len(args) == 3 {
 			path = args[2]
 		}
-		idx, err := index.Open(path, index.AllKinds)
+		idx, err := openIndex(path, index.AllKinds)
 		if err != nil {
 			return err
 		}
@@ -82,7 +95,7 @@ var savingsCmd = &cobra.Command{
 		if len(args) == 1 {
 			path = args[0]
 		}
-		idx, err := index.Open(path, index.KindsFromContent(flagContent))
+		idx, err := openIndex(path, index.KindsFromContent(flagContent))
 		if err != nil {
 			return err
 		}
@@ -120,9 +133,12 @@ var initCmd = &cobra.Command{
 func init() {
 	searchCmd.Flags().IntVar(&flagTopK, "top-k", 10, "maximum chunks to return")
 	searchCmd.Flags().StringVar(&flagContent, "content", "code", "files to index: code|docs|config|all")
+	searchCmd.Flags().StringVar(&flagModel, "model", "", "path to Model2Vec model directory")
 	findRelatedCmd.Flags().IntVar(&flagTopK, "top-k", 10, "maximum chunks to return")
+	findRelatedCmd.Flags().StringVar(&flagModel, "model", "", "path to Model2Vec model directory")
 	savingsCmd.Flags().IntVar(&flagTopK, "top-k", 10, "result size used for the estimate")
 	savingsCmd.Flags().StringVar(&flagContent, "content", "code", "files to index: code|docs|config|all")
+	savingsCmd.Flags().StringVar(&flagModel, "model", "", "path to Model2Vec model directory")
 	initCmd.Flags().StringVar(&flagAgent, "agent", "claude", "agent: claude|cursor|codex|generic")
 
 	rootCmd.AddCommand(searchCmd, findRelatedCmd, savingsCmd, serveCmd, initCmd)

@@ -49,9 +49,19 @@ func KindsFromContent(content string) map[string]bool {
 	}
 }
 
-// Open returns an index for root, loading a fresh on-disk cache when the file
-// set is unchanged, otherwise (re)building and caching it.
+// Open returns an index for root using the default hash embedder.
 func Open(root string, kinds map[string]bool) (*Index, error) {
+	return OpenWith(root, kinds, NewHashEmbedder(embedDim))
+}
+
+// OpenWith returns an index for root using the given embedder, loading a fresh
+// on-disk cache when the file set and embedder are unchanged, otherwise
+// (re)building and caching.
+func OpenWith(root string, kinds map[string]bool, emb Embedder) (*Index, error) {
+	root, err := ResolveRepo(root)
+	if err != nil {
+		return nil, err
+	}
 	abs, err := filepath.Abs(root)
 	if err != nil {
 		return nil, err
@@ -61,17 +71,17 @@ func Open(root string, kinds map[string]bool) (*Index, error) {
 	if err != nil {
 		return nil, err
 	}
-	fp := fingerprint(files, kinds)
-	if idx, ok := loadCache(abs, fp); ok {
+	fp := fingerprint(files, kinds, emb.ID())
+	if idx, ok := loadCache(abs, fp, emb); ok {
 		return idx, nil
 	}
-	idx := build(abs, files)
+	idx := buildWith(abs, files, emb)
 	_ = saveCache(abs, fp, idx)
 	return idx, nil
 }
 
-func build(abs string, files []fileInfo) *Index {
-	idx := &Index{Root: abs, emb: NewHashEmbedder(embedDim)}
+func buildWith(abs string, files []fileInfo, emb Embedder) *Index {
+	idx := &Index{Root: abs, emb: emb}
 	for _, f := range files {
 		data, err := os.ReadFile(filepath.Join(abs, f.rel))
 		if err != nil || isBinary(data) {
@@ -95,8 +105,8 @@ func (i *Index) finalize() {
 	i.bm25 = newBM25(docTokens)
 	if i.vecs == nil {
 		i.vecs = make([][]float32, len(i.Chunks))
-		for d := range i.Chunks {
-			i.vecs[d] = i.emb.Embed(docTokens[d])
+		for d, c := range i.Chunks {
+			i.vecs[d] = i.emb.Embed(c.Text + " " + c.File)
 		}
 	}
 }
@@ -109,7 +119,7 @@ func (i *Index) Search(query string, topK int) []Result {
 	qTokens := Tokenize(query)
 	lexRanking := topDocs(i.bm25.Score(qTokens))
 
-	qVec := i.emb.Embed(qTokens)
+	qVec := i.emb.Embed(query)
 	semScores := map[int]float64{}
 	for d, v := range i.vecs {
 		if s := cosine(qVec, v); s > 0 {
@@ -267,7 +277,7 @@ func cachePath(abs string) string {
 	return filepath.Join(cacheDir(), hex.EncodeToString(sum[:])+".gob")
 }
 
-func fingerprint(files []fileInfo, kinds map[string]bool) string {
+func fingerprint(files []fileInfo, kinds map[string]bool, embID string) string {
 	sort.Slice(files, func(a, b int) bool { return files[a].rel < files[b].rel })
 	h := sha256.New()
 	ks := make([]string, 0, len(kinds))
@@ -275,14 +285,14 @@ func fingerprint(files []fileInfo, kinds map[string]bool) string {
 		ks = append(ks, k)
 	}
 	sort.Strings(ks)
-	h.Write([]byte(strings.Join(ks, ",") + "\n"))
+	h.Write([]byte(strings.Join(ks, ",") + "\n" + embID + "\n"))
 	for _, f := range files {
 		_, _ = fmt.Fprintf(h, "%s:%d:%d\n", f.rel, f.mtime, f.size)
 	}
 	return hex.EncodeToString(h.Sum(nil))
 }
 
-func loadCache(abs, fp string) (*Index, bool) {
+func loadCache(abs, fp string, emb Embedder) (*Index, bool) {
 	f, err := os.Open(cachePath(abs))
 	if err != nil {
 		return nil, false
@@ -295,7 +305,7 @@ func loadCache(abs, fp string) (*Index, bool) {
 	if cd.Fingerprint != fp || len(cd.Vecs) != len(cd.Chunks) {
 		return nil, false
 	}
-	idx := &Index{Root: abs, Chunks: cd.Chunks, vecs: cd.Vecs, emb: NewHashEmbedder(embedDim)}
+	idx := &Index{Root: abs, Chunks: cd.Chunks, vecs: cd.Vecs, emb: emb}
 	idx.finalize()
 	return idx, true
 }

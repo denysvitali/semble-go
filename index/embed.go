@@ -1,14 +1,16 @@
 package index
 
 import (
+	"fmt"
 	"hash/fnv"
 	"math"
 )
 
-// Embedder turns a token list into a dense, L2-normalized vector.
+// Embedder turns raw text into a dense, L2-normalized vector.
 type Embedder interface {
-	Embed(tokens []string) []float32
+	Embed(text string) []float32
 	Dim() int
+	ID() string
 }
 
 // HashEmbedder is a pure-Go static embedder. It hashes each token and its
@@ -25,9 +27,11 @@ func NewHashEmbedder(dim int) *HashEmbedder {
 	return &HashEmbedder{dim: dim}
 }
 
-func (h *HashEmbedder) Dim() int { return h.dim }
+func (h *HashEmbedder) Dim() int   { return h.dim }
+func (h *HashEmbedder) ID() string { return fmt.Sprintf("hash%d", h.dim) }
 
-func (h *HashEmbedder) Embed(tokens []string) []float32 {
+func (h *HashEmbedder) Embed(text string) []float32 {
+	tokens := Tokenize(text)
 	v := make([]float32, h.dim)
 	for _, t := range tokens {
 		h.add(v, t, 1.0)

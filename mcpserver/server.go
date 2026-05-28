@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/denysvitali/semble-go/index"
+	"github.com/denysvitali/semble-go/model2vec"
 
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
@@ -38,7 +39,7 @@ func (s *Server) register() {
 			mcp.Description("Natural-language or code query (e.g. 'where are http requests retried')"),
 		),
 		mcp.WithString("repo",
-			mcp.Description("Path to the local repository to search (default: current directory)"),
+			mcp.Description("Local path or git URL of the repository to search (default: current directory). Remote URLs are shallow-cloned and cached."),
 			mcp.DefaultString("."),
 		),
 		mcp.WithNumber("top_k",
@@ -48,6 +49,10 @@ func (s *Server) register() {
 		mcp.WithString("content",
 			mcp.Description("Which files to index: code (default), docs, config, or all"),
 			mcp.DefaultString("code"),
+		),
+		mcp.WithString("model",
+			mcp.Description("Path to a local Model2Vec model directory (uses default hash embedder if empty)"),
+			mcp.DefaultString(""),
 		),
 	), s.handleSearch)
 
@@ -62,12 +67,16 @@ func (s *Server) register() {
 			mcp.Description("1-based line number within the file"),
 		),
 		mcp.WithString("repo",
-			mcp.Description("Path to the local repository (default: current directory)"),
+			mcp.Description("Local path or git URL of the repository (default: current directory)"),
 			mcp.DefaultString("."),
 		),
 		mcp.WithNumber("top_k",
 			mcp.Description("Maximum number of chunks to return (default: 10)"),
 			mcp.DefaultNumber(10),
+		),
+		mcp.WithString("model",
+			mcp.Description("Path to a local Model2Vec model directory (uses default hash embedder if empty)"),
+			mcp.DefaultString(""),
 		),
 	), s.handleFindRelated)
 }
@@ -81,8 +90,9 @@ func (s *Server) handleSearch(_ context.Context, req mcp.CallToolRequest) (*mcp.
 	repo := argStr(args, "repo", ".")
 	topK := argInt(args, "top_k", 10)
 	content := argStr(args, "content", "code")
+	model := argStr(args, "model", "")
 
-	idx, err := index.Open(repo, index.KindsFromContent(content))
+	idx, err := openIndex(repo, index.KindsFromContent(content), model)
 	if err != nil {
 		return mcp.NewToolResultError(fmt.Sprintf("failed to index %q: %v", repo, err)), nil
 	}
@@ -99,8 +109,9 @@ func (s *Server) handleFindRelated(_ context.Context, req mcp.CallToolRequest) (
 	line := argInt(args, "line", 0)
 	repo := argStr(args, "repo", ".")
 	topK := argInt(args, "top_k", 10)
+	model := argStr(args, "model", "")
 
-	idx, err := index.Open(repo, index.AllKinds)
+	idx, err := openIndex(repo, index.AllKinds, model)
 	if err != nil {
 		return mcp.NewToolResultError(fmt.Sprintf("failed to index %q: %v", repo, err)), nil
 	}
@@ -109,6 +120,17 @@ func (s *Server) handleFindRelated(_ context.Context, req mcp.CallToolRequest) (
 		return mcp.NewToolResultError(err.Error()), nil
 	}
 	return mcp.NewToolResultText(index.FormatResults(results)), nil
+}
+
+func openIndex(repo string, kinds map[string]bool, modelPath string) (*index.Index, error) {
+	if modelPath != "" {
+		m, err := model2vec.Load(modelPath)
+		if err != nil {
+			return nil, fmt.Errorf("load model %q: %w", modelPath, err)
+		}
+		return index.OpenWith(repo, kinds, m)
+	}
+	return index.Open(repo, kinds)
 }
 
 func argStr(args map[string]interface{}, key, def string) string {

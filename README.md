@@ -44,21 +44,22 @@ make build                                            # builds ./semble
 ## CLI
 
 ```sh
-semble search "where are http requests retried" ./path  [--top-k 10] [--content code|docs|config|all]
-semble find-related path/to/file.go 42 ./path           [--top-k 10]
-semble savings ./path                                   [--content all]
+semble search "where are http requests retried" ./path  [--top-k 10] [--content code|docs|config|all] [--model /path/to/model2vec]
+semble find-related path/to/file.go 42 ./path           [--top-k 10] [--model /path/to/model2vec]
+semble savings ./path                                   [--content all] [--model /path/to/model2vec]
 semble init [--agent claude|cursor|codex]               # prints MCP config
 semble serve                                            # run as MCP server (stdio)
 ```
 
-`path` defaults to the current directory.
+`path` defaults to the current directory and may be a local path or a git URL
+(remote repos are shallow-cloned and cached).
 
 ## MCP server
 
 `semble serve` exposes two read-only tools over stdio:
 
-- **search** — `query`, `repo` (local path), `top_k`, `content`
-- **find_related** — `file`, `line`, `repo`, `top_k`
+- **search** — `query`, `repo` (local path or git URL), `top_k`, `content`, `model`
+- **find_related** — `file`, `line`, `repo`, `top_k`, `model`
 
 Wire it into an agent with `semble init`:
 
@@ -71,16 +72,41 @@ Wire it into an agent with `semble init`:
 }
 ```
 
+## Model
+
+By default, semble-go uses a pure-Go `HashEmbedder` (hashing trick over
+character trigrams). It works offline with no model files, but it is not
+semantically aware — morphologically unrelated synonyms get unrelated vectors.
+
+For real semantic recall, pass `--model /path/to/model2vec` pointing to a local
+Model2Vec model directory containing:
+
+- `model.safetensors` — static embedding weights (`[vocab_size, dim]` tensor
+  named `embeddings`), supporting F32, F16 and BF16 dtypes.
+- `tokenizer.json` — WordPiece tokenizer config (BERT-style, with
+  `vocab`, `unk_token`, `continuing_subword_prefix`).
+
+The [MinishLab/potion-models](https://github.com/MinishLab/potion-models)
+models (`potion-16M`, `potion-32M`, etc.) are a good fit. Download a model
+locally and point `--model` at the directory:
+
+```sh
+# example with huggingface-cli
+huggingface-cli download minishlab/potion-16M --local-dir ./potion-16M
+semble search "http retry logic" --model ./potion-16M
+```
+
+The Model2Vec embedder is ~256-dimensional, runs entirely in Go (no CGO), and
+the index cache is keyed by embedder ID, so switching between the hash default
+and a real model does not invalidate the cache.
+
 ## Differences from upstream Semble
 
 - Heuristic chunking instead of tree-sitter (no CGO / per-language grammars).
-- Pure-Go hashing embedder by default instead of the `potion-code` Model2Vec
-  model. Lexical (BM25) recall matches upstream intent; true distilled semantic
-  recall awaits a Model2Vec backend behind the `Embedder` interface.
-- Local repositories only (no remote git-URL cloning yet).
+- Hashing embedder by default; a real Model2Vec backend is available via
+  `--model` (see below) for true distilled semantic recall.
 
 ## License
 
 MIT — see [LICENSE](LICENSE). This is an independent Go port inspired by
 [MinishLab/semble](https://github.com/MinishLab/semble) (MIT, © 2026 Thomas van Dongen).
-```
