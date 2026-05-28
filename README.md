@@ -8,10 +8,14 @@ spend on `grep` + reading files.
 
 ## How it works
 
-```
-files ─► chunk ─► ┌─ BM25 (lexical) ──┐
-                  │                    ├─ Reciprocal Rank Fusion ─► top-k chunks
-                  └─ embeddings (cos) ─┘
+```mermaid
+flowchart LR
+    F[files] --> C[chunk]
+    C --> B[BM25 lexical]
+    C --> E[embeddings cosine]
+    B --> R[Reciprocal Rank Fusion]
+    E --> R
+    R --> T[top-k chunks]
 ```
 
 - **Chunking** (`index/chunk.go`): pure-Go, no CGO. Files are split on blank-line
