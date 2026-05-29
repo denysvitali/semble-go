@@ -19,6 +19,7 @@ var (
 	flagContent string
 	flagAgent   string
 	flagModel   string
+	flagJSON    bool
 )
 
 var rootCmd = &cobra.Command{
@@ -52,7 +53,16 @@ var searchCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		fmt.Println(index.FormatResults(idx.Search(args[0], flagTopK)))
+		results := idx.Search(args[0], flagTopK)
+		if flagJSON {
+			out, err := index.FormatResultsJSON(results)
+			if err != nil {
+				return err
+			}
+			fmt.Println(out)
+			return nil
+		}
+		fmt.Println(index.FormatResults(results))
 		return nil
 	},
 }
@@ -74,6 +84,14 @@ var findRelatedCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
+		if flagJSON {
+			out, err := index.FormatResultsJSON(results)
+			if err != nil {
+				return err
+			}
+			fmt.Println(out)
+			return nil
+		}
 		fmt.Println(index.FormatResults(results))
 		return nil
 	},
@@ -89,6 +107,14 @@ var savingsCmd = &cobra.Command{
 			return err
 		}
 		s := idx.Estimate(flagTopK)
+		if flagJSON {
+			out, err := index.FormatSavingsJSON(s)
+			if err != nil {
+				return err
+			}
+			fmt.Println(out)
+			return nil
+		}
 		fmt.Printf("files:         %d\n", s.Files)
 		fmt.Printf("chunks:        %d\n", s.Chunks)
 		fmt.Printf("corpus tokens: ~%d\n", s.CorpusTokens)
@@ -123,11 +149,14 @@ func init() {
 	searchCmd.Flags().IntVar(&flagTopK, "top-k", 10, "maximum chunks to return")
 	searchCmd.Flags().StringVar(&flagContent, "content", "code", "files to index: code|docs|config|all")
 	searchCmd.Flags().StringVar(&flagModel, "model", "", "path to Model2Vec model directory")
+	searchCmd.Flags().BoolVar(&flagJSON, "json", false, "output results as JSON")
 	findRelatedCmd.Flags().IntVar(&flagTopK, "top-k", 10, "maximum chunks to return")
 	findRelatedCmd.Flags().StringVar(&flagModel, "model", "", "path to Model2Vec model directory")
+	findRelatedCmd.Flags().BoolVar(&flagJSON, "json", false, "output results as JSON")
 	savingsCmd.Flags().IntVar(&flagTopK, "top-k", 10, "result size used for the estimate")
 	savingsCmd.Flags().StringVar(&flagContent, "content", "code", "files to index: code|docs|config|all")
 	savingsCmd.Flags().StringVar(&flagModel, "model", "", "path to Model2Vec model directory")
+	savingsCmd.Flags().BoolVar(&flagJSON, "json", false, "output the estimate as JSON")
 	initCmd.Flags().StringVar(&flagAgent, "agent", "claude", "agent: claude|cursor|codex|generic")
 
 	rootCmd.AddCommand(searchCmd, findRelatedCmd, savingsCmd, serveCmd, initCmd)
