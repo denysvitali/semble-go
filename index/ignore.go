@@ -38,6 +38,8 @@ type ignoreList struct {
 	allow []string // "!" force-include patterns
 }
 
+// loadIgnore reads .gitignore and .sembleignore from root. Their patterns are
+// additive on top of the built-in alwaysSkip defaults; "!" lines force-include.
 func loadIgnore(root string) *ignoreList {
 	il := &ignoreList{}
 	for _, name := range []string{".gitignore", ".sembleignore"} {
