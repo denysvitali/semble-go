@@ -145,6 +145,33 @@ var initCmd = &cobra.Command{
 	},
 }
 
+var cleanCmd = &cobra.Command{
+	Use:   "clean",
+	Short: "Remove the on-disk index cache",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		removed, freed, err := index.CleanCache()
+		if err != nil {
+			return err
+		}
+		fmt.Printf("removed %d cache entries (~%s freed)\n", removed, humanBytes(freed))
+		return nil
+	},
+}
+
+// humanBytes formats a byte count as a short human-readable size.
+func humanBytes(n int64) string {
+	const unit = 1024
+	if n < unit {
+		return fmt.Sprintf("%dB", n)
+	}
+	div, exp := int64(unit), 0
+	for v := n / unit; v >= unit; v /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.1f%cB", float64(n)/float64(div), "KMGTPE"[exp])
+}
+
 func init() {
 	searchCmd.Flags().IntVar(&flagTopK, "top-k", 10, "maximum chunks to return")
 	searchCmd.Flags().StringVar(&flagContent, "content", "code", "files to index: code|docs|config|all")
@@ -159,7 +186,7 @@ func init() {
 	savingsCmd.Flags().BoolVar(&flagJSON, "json", false, "output the estimate as JSON")
 	initCmd.Flags().StringVar(&flagAgent, "agent", "claude", "agent: claude|cursor|codex|generic")
 
-	rootCmd.AddCommand(searchCmd, findRelatedCmd, savingsCmd, serveCmd, initCmd)
+	rootCmd.AddCommand(searchCmd, findRelatedCmd, savingsCmd, serveCmd, initCmd, cleanCmd)
 }
 
 // mcpConfig prints the MCP server stanza. The shape is shared across Claude

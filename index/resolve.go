@@ -27,7 +27,7 @@ func ResolveRepo(spec string) (string, error) {
 	if !IsRemote(spec) {
 		return spec, nil
 	}
-	dest := filepath.Join(cacheDir(), "repos", hashSpec(spec))
+	dest := filepath.Join(CacheDir(), "repos", hashSpec(spec))
 	timeout := cloneTimeout()
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
