@@ -9,7 +9,7 @@ import (
 
 func TestCacheDir(t *testing.T) {
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
-	os.Unsetenv("SEMBLE_CACHE_DIR")
+	_ = os.Unsetenv("SEMBLE_CACHE_DIR")
 	dir := CacheDir()
 	if dir == "" {
 		t.Fatal("CacheDir() is empty")
@@ -21,7 +21,7 @@ func TestCacheDir(t *testing.T) {
 
 func TestCleanCache(t *testing.T) {
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
-	os.Unsetenv("SEMBLE_CACHE_DIR")
+	_ = os.Unsetenv("SEMBLE_CACHE_DIR")
 	dir := CacheDir()
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
