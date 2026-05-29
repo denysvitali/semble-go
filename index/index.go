@@ -261,7 +261,10 @@ type cacheData struct {
 	Vecs        [][]float32
 }
 
-func cacheDir() string {
+// CacheDir returns the base directory used for the on-disk index cache.
+// SEMBLE_CACHE_DIR overrides it; otherwise the OS user cache dir (honoring
+// XDG_CACHE_HOME on Linux) is used, falling back to the temp dir.
+func CacheDir() string {
 	if d := os.Getenv("SEMBLE_CACHE_DIR"); d != "" {
 		return d
 	}
@@ -272,9 +275,32 @@ func cacheDir() string {
 	return filepath.Join(base, "semble-go")
 }
 
+// CleanCache removes the contents of the cache directory, reporting how many
+// entries were deleted and how many bytes were freed.
+func CleanCache() (removed int, freedBytes int64, err error) {
+	dir := CacheDir()
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return 0, 0, nil
+		}
+		return 0, 0, err
+	}
+	for _, e := range entries {
+		if info, ierr := e.Info(); ierr == nil {
+			freedBytes += info.Size()
+		}
+		if rerr := os.RemoveAll(filepath.Join(dir, e.Name())); rerr != nil {
+			return removed, freedBytes, rerr
+		}
+		removed++
+	}
+	return removed, freedBytes, nil
+}
+
 func cachePath(abs string) string {
 	sum := sha256.Sum256([]byte(abs))
-	return filepath.Join(cacheDir(), hex.EncodeToString(sum[:])+".gob")
+	return filepath.Join(CacheDir(), hex.EncodeToString(sum[:])+".gob")
 }
 
 func fingerprint(files []fileInfo, kinds map[string]bool, embID string) string {
@@ -311,7 +337,7 @@ func loadCache(abs, fp string, emb Embedder) (*Index, bool) {
 }
 
 func saveCache(abs, fp string, idx *Index) error {
-	dir := cacheDir()
+	dir := CacheDir()
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
