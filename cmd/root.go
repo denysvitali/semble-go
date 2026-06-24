@@ -184,18 +184,16 @@ func init() {
 	savingsCmd.Flags().StringVar(&flagContent, "content", "code", "files to index: code|docs|config|all")
 	savingsCmd.Flags().StringVar(&flagModel, "model", "", "path to Model2Vec model directory")
 	savingsCmd.Flags().BoolVar(&flagJSON, "json", false, "output the estimate as JSON")
-	initCmd.Flags().StringVar(&flagAgent, "agent", "claude", "agent: claude|cursor|codex|generic")
+	initCmd.Flags().StringVar(&flagAgent, "agent", "cursor", "agent: cursor|generic")
 
 	rootCmd.AddCommand(searchCmd, findRelatedCmd, savingsCmd, serveCmd, initCmd, cleanCmd)
 }
 
-// mcpConfig prints the MCP server stanza. The shape is shared across Claude
-// Code, Cursor and Codex; only the destination file differs per agent.
+// mcpConfig prints the MCP server stanza. The shape is shared across agents;
+// only the destination file differs per agent.
 func mcpConfig(agent, bin string) string {
 	dest := map[string]string{
-		"claude": ".mcp.json",
 		"cursor": ".cursor/mcp.json",
-		"codex":  "~/.codex/config (mcp_servers)",
 	}[agent]
 	if dest == "" {
 		dest = ".mcp.json"

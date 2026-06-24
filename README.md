@@ -47,7 +47,7 @@ make build                                            # builds ./semble
 semble search "where are http requests retried" ./path  [--top-k 10] [--content code|docs|config|all] [--model /path/to/model2vec]
 semble find-related path/to/file.go 42 ./path           [--top-k 10] [--model /path/to/model2vec]
 semble savings ./path                                   [--content all] [--model /path/to/model2vec]
-semble init [--agent claude|cursor|codex]               # prints MCP config
+semble init [--agent cursor]                          # prints MCP config
 semble serve                                            # run as MCP server (stdio)
 ```
 
